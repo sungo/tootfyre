@@ -1,5 +1,8 @@
 package main
 
+// Code originally developed by sungo (https://sungo.io)
+// Distributed under the terms of the 0BSD license https://opensource.org/licenses/0BSD
+
 import (
 	"context"
 	"errors"

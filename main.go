@@ -77,7 +77,7 @@ func (cmd *Cmd) LoadConfig(path string) (Config, error) {
 }
 
 func (cmd *Cmd) WriteConfig(config Config) error {
-	file, err := os.OpenFile(cmd.Config, os.O_RDWR|os.O_CREATE, 0o600)
+	file, err := os.Create(cmd.Config)
 	if err != nil {
 		return err
 	}

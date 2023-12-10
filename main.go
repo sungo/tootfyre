@@ -195,7 +195,7 @@ func (cmd *Cmd) Run() error {
 			}
 
 			if deleted {
-				cmd.Rest(2)
+				cmd.Rest(15)
 			}
 		}
 		pg.SinceID = ""

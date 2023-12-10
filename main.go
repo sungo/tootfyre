@@ -37,6 +37,7 @@ type (
 		ExcludeBoosts     bool   `kong:"name='exclude-boosts',default=false,negatable,help='exclude boosted'"`
 		ExcludeDirect     bool   `kong:"name='exclude-dms',default=true,negatable,help='exclude DMs (default on)'"`
 		Count             int    `kong:"name='count',default='${defaultCount}',help='the number of toots to act on in this run'"`
+		DryRun            bool   `kong:"name='dry-run',short='n',default=false,help='do not do the thing just log about the thing'"`
 	}
 	Config struct {
 		Server       string
@@ -190,9 +191,26 @@ func (cmd *Cmd) Run() error {
 					continue
 				}
 				found++
-				log.Info().Interface("id", status.ID).Str("url", status.URL).Time("created", status.CreatedAt).Str("content", status.Content).Msg("deleting status")
-				if err := c.DeleteStatus(ctx, status.ID); err != nil {
-					return err
+				logger := log.With().
+					Interface("id", status.ID).
+					Str("url", status.URL).
+					Time("created", status.CreatedAt).
+					Str("content", status.Content).
+					Bool("is_reply", status.InReplyToID != nil).
+					Bool("is_boost", status.Reblog != nil).
+					Str("visibility", status.Visibility).
+					Bool("pinned", status.Pinned == true).
+					Bool("bookmarked", status.Bookmarked == true).
+					Bool("favstarred", status.Favourited == true).
+					Logger()
+
+				if cmd.DryRun {
+					logger.Warn().Msg("dry run: would delete status otherwise")
+				} else {
+					logger.Info().Msg("deleting status")
+					if err := c.DeleteStatus(ctx, status.ID); err != nil {
+						return err
+					}
 				}
 				deleted = true
 

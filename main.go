@@ -16,11 +16,12 @@ import (
 )
 
 const (
-	ourName      = "tootfyre"
-	ourVersion   = "0.0.1"
-	ourURL       = "https://git.sr.ht/~sungo/tootfyre.git"
-	timeMax      = -(30 * (24 * (60 * (60 * time.Second))))
-	defaultCount = "10"
+	ourName         = "tootfyre"
+	ourVersion      = "0.0.1"
+	ourURL          = "https://git.sr.ht/~sungo/tootfyre.git"
+	timeMax         = -(30 * (24 * (60 * (60 * time.Second))))
+	defaultCount    = "10"
+	paginationLimit = 200
 )
 
 type (
@@ -146,10 +147,11 @@ func (cmd *Cmd) Run() error {
 		pg    mastodon.Pagination
 		found int
 	)
+
+	pg.Limit = paginationLimit
 	fmt.Printf("Starting run. Will delete a max of %d toots from before %s\n", cmd.Count, endTime)
 
 	for {
-		pg.Limit = 100
 		fmt.Printf("Polling for toots before ID %s, max of %d\n", pg.MaxID, pg.Limit)
 		statuses, err := c.GetAccountStatuses(ctx, account.ID, &pg)
 		if err != nil {
@@ -198,7 +200,7 @@ func (cmd *Cmd) Run() error {
 		}
 		pg.SinceID = ""
 		pg.MinID = ""
-		pg.Limit = 100
+		pg.Limit = paginationLimit
 
 		cmd.Rest(5)
 	}

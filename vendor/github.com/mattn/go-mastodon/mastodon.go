@@ -182,7 +182,6 @@ func (c *Client) authenticate(ctx context.Context, params url.Values) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("%+v\n", params)
 	u.Path = path.Join(u.Path, "/oauth/token")
 
 	req, err := http.NewRequest(http.MethodPost, u.String(), strings.NewReader(params.Encode()))

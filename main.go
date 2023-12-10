@@ -33,6 +33,7 @@ type (
 		ExcludeBookmarked bool   `kong:"name='exclude-bookmarked',default=true,negatable,help='exclude toots that are bookmarked'"`
 		ExcludePublic     bool   `kong:"name='exclude-public',default=false,negatable,help='exclude toots with a visibility of public'"`
 		ExcludeBoosts     bool   `kong:"name='exclude-boosts',default=false,negatable,help='exclude boosted'"`
+		ExcludeDirect     bool   `kong:"name='exclude-dms',default=true,negatable,help='exclude DMs (default on)'"`
 		Count             int    `kong:"name='count',default='${defaultCount}',help='the number of toots to act on in this run'"`
 	}
 	Config struct {
@@ -180,6 +181,8 @@ func (cmd *Cmd) Run() error {
 				case cmd.ExcludeBoosts && status.Reblog != nil:
 					continue
 				case cmd.ExcludeReplies && status.InReplyToID != nil:
+					continue
+				case cmd.ExcludeDirect && status.Visibility == mastodon.VisibilityDirectMessage:
 					continue
 				}
 				found++

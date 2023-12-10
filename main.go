@@ -13,6 +13,8 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/mattn/go-mastodon"
 	toml "github.com/pelletier/go-toml"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -97,7 +99,7 @@ func (cmd *Cmd) WriteConfig(config Config) error {
 
 func (cmd *Cmd) Rest(secs int) {
 	if cmd.Slow {
-		fmt.Printf("slow mode engaged. resting for %d seconds\n", secs)
+		log.Info().Int("seconds", secs).Msg("slow mode engaged. resting")
 		time.Sleep(time.Duration(secs) * time.Second)
 	}
 }
@@ -115,6 +117,7 @@ func (cmd *Cmd) Run() error {
 	}
 
 	if (config.ClientID == "") || (config.ClientSecret == "") {
+		log.Info().Msg("getting app credentials")
 
 		app, err := mastodon.RegisterApp(ctx, &mastodon.AppConfig{
 			Server:     config.Server,
@@ -139,6 +142,7 @@ func (cmd *Cmd) Run() error {
 	})
 	c.UserAgent = fmt.Sprintf("%s/%s", ourName, ourVersion)
 
+	log.Info().Msg("getting account info")
 	account, err := c.GetAccountCurrentUser(ctx)
 	if err != nil {
 		return err
@@ -150,10 +154,10 @@ func (cmd *Cmd) Run() error {
 	)
 
 	pg.Limit = paginationLimit
-	fmt.Printf("Starting run. Will delete a max of %d toots from before %s\n", cmd.Count, endTime)
+	log.Info().Int("max_toots", cmd.Count).Time("before", endTime).Msg("starting run")
 
 	for {
-		fmt.Printf("Polling for toots before ID %s, max of %d\n", pg.MaxID, pg.Limit)
+		log.Info().Msgf("Polling for toots before ID %s, max of %d", pg.MaxID, pg.Limit)
 		statuses, err := c.GetAccountStatuses(ctx, account.ID, &pg)
 		if err != nil {
 			return err
@@ -163,7 +167,7 @@ func (cmd *Cmd) Run() error {
 			return nil
 		}
 
-		fmt.Printf("==> Found %d statuses to consider\n", len(statuses))
+		log.Info().Int("count", len(statuses)).Msg("found statuses to consider")
 
 		for id := range statuses {
 			var (
@@ -186,7 +190,7 @@ func (cmd *Cmd) Run() error {
 					continue
 				}
 				found++
-				fmt.Printf("==> Deleting [ %s // %s ] %s - %s\n", status.ID, status.URL, status.CreatedAt, status.Content)
+				log.Info().Interface("id", status.ID).Str("url", status.URL).Time("created", status.CreatedAt).Str("content", status.Content).Msg("deleting status")
 				if err := c.DeleteStatus(ctx, status.ID); err != nil {
 					return err
 				}
@@ -209,4 +213,9 @@ func (cmd *Cmd) Run() error {
 	}
 
 	return nil
+}
+
+func init() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 }

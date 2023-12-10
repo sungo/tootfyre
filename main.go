@@ -174,7 +174,7 @@ func (cmd *Cmd) Run() error {
 				switch {
 				case cmd.ExcludePinned && status.Pinned == true:
 					continue
-				case cmd.ExcludePublic && status.Visibility == "public":
+				case cmd.ExcludePublic && status.Visibility == mastodon.VisibilityPublic:
 					continue
 				case cmd.ExcludeBookmarked && status.Bookmarked == true:
 					continue

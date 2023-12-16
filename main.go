@@ -230,6 +230,15 @@ func (cmd *Cmd) Run() error {
 				cmd.Rest(15)
 			}
 		}
+
+		if pg.MaxID == "" {
+			return nil
+		}
+
+		if pg.MinID == "" {
+			return nil
+		}
+
 		pg.SinceID = ""
 		pg.MinID = ""
 		pg.Limit = paginationLimit

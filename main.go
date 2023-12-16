@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/mattn/go-isatty"
 	"github.com/mattn/go-mastodon"
 	toml "github.com/pelletier/go-toml"
 	"github.com/rs/zerolog"
@@ -107,6 +108,9 @@ func (cmd *Cmd) Rest(secs int) {
 }
 
 func (cmd *Cmd) Run() error {
+	if isatty.IsTerminal(os.Stdout.Fd()) {
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	}
 	if cmd.Quiet {
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	} else {
@@ -234,9 +238,4 @@ func (cmd *Cmd) Run() error {
 	}
 
 	return nil
-}
-
-func init() {
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 }

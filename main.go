@@ -38,6 +38,7 @@ type (
 		ExcludeDirect     bool   `kong:"name='exclude-dms',default=true,negatable,help='exclude DMs (default on)'"`
 		Count             int    `kong:"name='count',default='${defaultCount}',help='the number of toots to act on in this run'"`
 		DryRun            bool   `kong:"name='dry-run',short='n',default=false,help='do not do the thing just log about the thing'"`
+		Quiet             bool   `kong:"name='quiet',default=false,help='only log about errors and the stuff we deleted'"`
 	}
 	Config struct {
 		Server       string
@@ -100,12 +101,18 @@ func (cmd *Cmd) WriteConfig(config Config) error {
 
 func (cmd *Cmd) Rest(secs int) {
 	if cmd.Slow {
-		log.Info().Int("seconds", secs).Msg("slow mode engaged. resting")
+		log.Debug().Int("seconds", secs).Msg("slow mode engaged. resting")
 		time.Sleep(time.Duration(secs) * time.Second)
 	}
 }
 
 func (cmd *Cmd) Run() error {
+	if cmd.Quiet {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	} else {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	}
+
 	var (
 		endTime     = time.Now().Add(timeMax)
 		ctx, cancel = context.WithCancel(context.Background())
@@ -118,7 +125,7 @@ func (cmd *Cmd) Run() error {
 	}
 
 	if (config.ClientID == "") || (config.ClientSecret == "") {
-		log.Info().Msg("getting app credentials")
+		log.Debug().Msg("getting app credentials")
 
 		app, err := mastodon.RegisterApp(ctx, &mastodon.AppConfig{
 			Server:     config.Server,
@@ -143,7 +150,7 @@ func (cmd *Cmd) Run() error {
 	})
 	c.UserAgent = fmt.Sprintf("%s/%s", ourName, ourVersion)
 
-	log.Info().Msg("getting account info")
+	log.Debug().Msg("getting account info")
 	account, err := c.GetAccountCurrentUser(ctx)
 	if err != nil {
 		return err
@@ -155,20 +162,16 @@ func (cmd *Cmd) Run() error {
 	)
 
 	pg.Limit = paginationLimit
-	log.Info().Int("max_toots", cmd.Count).Time("before", endTime).Msg("starting run")
+	log.Debug().Int("max_toots", cmd.Count).Time("before", endTime).Msg("starting run")
 
 	for {
-		log.Info().Msgf("Polling for toots before ID %s, max of %d", pg.MaxID, pg.Limit)
+		log.Debug().Msgf("Polling for toots before ID %s, max of %d", pg.MaxID, pg.Limit)
 		statuses, err := c.GetAccountStatuses(ctx, account.ID, &pg)
 		if err != nil {
 			return err
 		}
 
-		if pg.MaxID == "" {
-			return nil
-		}
-
-		log.Info().Int("count", len(statuses)).Msg("found statuses to consider")
+		log.Debug().Int("count", len(statuses)).Msg("found statuses to consider")
 
 		for id := range statuses {
 			var (

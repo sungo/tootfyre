@@ -165,7 +165,7 @@ func (cmd *Cmd) Run() error {
 		found int
 	)
 
-	pg.Limit = paginationLimit
+	pg.Limit = int64(cmd.Count)
 	log.Debug().Int("max_toots", cmd.Count).Time("before", endTime).Msg("starting run")
 
 	for {

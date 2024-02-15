@@ -40,6 +40,7 @@ type (
 		Count             int    `kong:"name='count',default='${defaultCount}',help='the number of toots to act on in this run'"`
 		DryRun            bool   `kong:"name='dry-run',short='n',default=false,help='do not do the thing just log about the thing'"`
 		Quiet             bool   `kong:"name='quiet',default=false,help='only log about errors and the stuff we deleted'"`
+		BurnItAll         bool   `kong:"name='burn-it-all',default=false,help='ignore all exclusions, set no time limit, watch the world burn. slowly'"`
 	}
 	Config struct {
 		Server       string
@@ -161,13 +162,14 @@ func (cmd *Cmd) Run() error {
 	}
 
 	var (
-		pg    mastodon.Pagination
-		found int
+		pg       mastodon.Pagination
+		toDelete = make([]*mastodon.Status, 0)
 	)
 
-	pg.Limit = int64(cmd.Count)
+	pg.Limit = int64(paginationLimit)
 	log.Debug().Int("max_toots", cmd.Count).Time("before", endTime).Msg("starting run")
 
+LOOP:
 	for {
 		log.Debug().Msgf("Polling for toots before ID %s, max of %d", pg.MaxID, pg.Limit)
 		statuses, err := c.GetAccountStatuses(ctx, account.ID, &pg)
@@ -178,65 +180,59 @@ func (cmd *Cmd) Run() error {
 		log.Debug().Int("count", len(statuses)).Msg("found statuses to consider")
 
 		for id := range statuses {
-			var (
-				deleted bool
-				status  = statuses[id]
-			)
-			if status.CreatedAt.Before(endTime) {
+			status := statuses[id]
+			logger := log.With().
+				Interface("id", status.ID).
+				Str("url", status.URL).
+				Time("created", status.CreatedAt).
+				Str("content", status.Content).
+				Bool("is_reply", status.InReplyToID != nil).
+				Bool("is_boost", status.Reblog != nil).
+				Str("visibility", status.Visibility).
+				Bool("pinned", status.Pinned == true).
+				Bool("bookmarked", status.Bookmarked == true).
+				Bool("favstarred", status.Favourited == true).
+				Logger()
+
+			if !cmd.BurnItAll {
+				if !status.CreatedAt.Before(endTime) {
+					logger.Debug().Msg("skipping for being too young")
+					continue
+				}
 				switch {
 				case cmd.ExcludePinned && status.Pinned == true:
+					logger.Debug().Msg("skipping due to pinned")
 					continue
 				case cmd.ExcludePublic && status.Visibility == mastodon.VisibilityPublic:
+					logger.Debug().Msg("skipping due to being public")
 					continue
 				case cmd.ExcludeBookmarked && status.Bookmarked == true:
+					logger.Debug().Msg("skipping due to being bookmarked")
 					continue
 				case cmd.ExcludeBoosts && status.Reblog != nil:
+					logger.Debug().Msg("skipping due to being a boost")
 					continue
 				case cmd.ExcludeReplies && status.InReplyToID != nil:
+					logger.Debug().Msg("skipping due to being a reply")
 					continue
 				case cmd.ExcludeDirect && status.Visibility == mastodon.VisibilityDirectMessage:
+					logger.Debug().Msg("skipping due to being a DM")
 					continue
 				}
-				found++
-				logger := log.With().
-					Interface("id", status.ID).
-					Str("url", status.URL).
-					Time("created", status.CreatedAt).
-					Str("content", status.Content).
-					Bool("is_reply", status.InReplyToID != nil).
-					Bool("is_boost", status.Reblog != nil).
-					Str("visibility", status.Visibility).
-					Bool("pinned", status.Pinned == true).
-					Bool("bookmarked", status.Bookmarked == true).
-					Bool("favstarred", status.Favourited == true).
-					Logger()
-
-				if cmd.DryRun {
-					logger.Warn().Msg("dry run: would delete status otherwise")
-				} else {
-					logger.Info().Msg("deleting status")
-					if err := c.DeleteStatus(ctx, status.ID); err != nil {
-						return err
-					}
-				}
-				deleted = true
-
-			}
-			if found >= cmd.Count {
-				return nil
 			}
 
-			if deleted {
-				cmd.Rest(15)
+			toDelete = append(toDelete, status)
+			if len(toDelete) >= cmd.Count {
+				break LOOP
 			}
 		}
 
 		if pg.MaxID == "" {
-			return nil
+			break LOOP
 		}
 
 		if pg.MinID == "" {
-			return nil
+			break LOOP
 		}
 
 		pg.SinceID = ""
@@ -244,6 +240,34 @@ func (cmd *Cmd) Run() error {
 		pg.Limit = paginationLimit
 
 		cmd.Rest(5)
+	}
+	log.Info().Msgf("Found %d statuses to delete", len(toDelete))
+
+	for idx := len(toDelete) - 1; idx >= 0; idx-- {
+		status := toDelete[idx]
+		logger := log.With().
+			Interface("id", status.ID).
+			Str("url", status.URL).
+			Time("created", status.CreatedAt).
+			Str("content", status.Content).
+			Bool("is_reply", status.InReplyToID != nil).
+			Bool("is_boost", status.Reblog != nil).
+			Str("visibility", status.Visibility).
+			Bool("pinned", status.Pinned == true).
+			Bool("bookmarked", status.Bookmarked == true).
+			Bool("favstarred", status.Favourited == true).
+			Logger()
+
+		if cmd.DryRun {
+			logger.Warn().Msg("dry run: would delete status otherwise")
+		} else {
+			logger.Info().Msg("deleting status")
+			if err := c.DeleteStatus(ctx, status.ID); err != nil {
+				logger.Error().Err(err).Msg("error when deleting")
+			}
+
+			cmd.Rest(15)
+		}
 	}
 
 	return nil
